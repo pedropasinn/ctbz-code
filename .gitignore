@@ -1,0 +1,26 @@
+node_modules/
+dist/
+*.tgz
+*.log
+.DS_Store
+.idea/
+.vscode/
+.env
+.env.local
+
+# State local (DB, channels)
+.ctbz/
+
+# Reports gerados
+site_observatory/
+
+# Contexto local (não-versionado) para o briefing agent
+local_context/
+*.local.md
+
+# Notes/handoffs internos (cada instalação pode ter os seus, fora do git)
+notes/
+
+# Arquivos de dados confidenciais (qualquer JSON em ctbz_tasks que não seja exemplo)
+ctbz_tasks/*.json
+ctbz_tasks/private_*.md

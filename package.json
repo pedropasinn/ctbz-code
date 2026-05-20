@@ -1,0 +1,37 @@
+{
+  "name": "ctbz-code",
+  "version": "0.1.0",
+  "description": "TUI interna estilo Claude Code para a Contabilizei",
+  "type": "module",
+  "bin": {
+    "ctbz": "./bin/ctbz.js",
+    "ctbz-code": "./bin/ctbz-code.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "tui": "tsx src/index.tsx",
+    "start": "node bin/ctbz-code.js",
+    "smoke": "tsx tests/smoke/run_all.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.1",
+    "better-sqlite3": "^11.10.0",
+    "ink": "^5.0.1",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "meow": "^13.2.0",
+    "react": "^18.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
