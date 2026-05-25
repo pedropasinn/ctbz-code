@@ -1,5 +1,6 @@
 import { AgentSpec } from './types.js';
 import { registerAgent } from './registry.js';
+import { DEFAULT_MODEL } from '../constants.js';
 
 const SYSTEM_PROMPT = `Você é o agente \`rescore\`. Reescora itens que outro
 sistema (heurística, modelo, regra) classificou — encontre prováveis
@@ -31,7 +32,7 @@ const SPEC: AgentSpec = {
   description: 'Reescora itens classificados por outro sistema; identifica falsos-positivos.',
   system_prompt: SYSTEM_PROMPT,
   tools: ['read_confidencial', 'read_file'],
-  model_name: 'claude-opus-4-7',
+  model_name: DEFAULT_MODEL,
 };
 
 registerAgent(SPEC);

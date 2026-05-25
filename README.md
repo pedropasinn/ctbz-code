@@ -1,11 +1,11 @@
-# CTBZ.code
+# ctbz●code
 
-> TUI + monorepo-like de orquestração de agentes IA para a Contabilizei.
+> TUI + monorepo-like de orquestração de agentes IA.
 > Roda no Linux, macOS e Windows.
 
-`ctbz-code` é a CLI/TUI interna que junta:
+`ctbz-code` é a CLI/TUI que junta:
 
-1. **TUI** estilo Claude Code (Ink + React) com branding Contabilizei.
+1. **TUI** estilo Claude Code (Ink + React), tema configurável.
 2. **Provedor nativo `ctbz`** — agentes próprios (Anthropic SDK + tool_use
    loop) com tools internas: `read_confidencial`, `read_file`, `http_get`,
    `shell_sandbox`.
@@ -14,13 +14,14 @@
 4. **Arquitetura de fila monorepo-like** — `ctbz_tasks/*.md` parseados como
    filas de tarefas; runner próprio dispatcha pra agentes, persiste em
    SQLite, dispara eventos via channels (NDJSON local, função, webhook).
-5. **Mentions Observatory** — sonda Claude/OpenAI/Gemini/Perplexity em 20
-   prompts curados, escora com Claude Opus, gera report Markdown semanal.
+5. **Mentions Observatory** — sonda Claude/OpenAI/Gemini/Perplexity em
+   prompts curados (default 20, configurável), escora com Claude, gera
+   report Markdown semanal de Share-of-Voice e gap vs concorrentes.
 
 ## Quickstart
 
 ```bash
-git clone git@github.com:pedropasinn/ctbz-code.git
+git clone https://github.com/pedropasinn/ctbz-code.git
 cd ctbz-code
 ./setup.sh                  # ou .\setup.ps1 no Windows
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -38,8 +39,15 @@ Pré-req: Node ≥18.
 | `CTBZ_CONFIDENCIAL_DIR`      | pasta-pai do projeto                 | Onde `read_confidencial` busca |
 | `CTBZ_CONFIDENCIAL_FILES`    | (vazio = rejeita tudo)               | Lista comma-sep de basenames permitidos |
 | `CTBZ_TASKS_DIR`             | `WORK_DIR/ctbz_tasks`                | Filas estilo monorepo |
+| `CTBZ_QUEUE_VERIFY_SHELL`    | (off)                                | `=1` permite `verify="..."` via shell:true (pipes/&&). Default usa `shell_sandbox` (mais seguro). |
 | `CTBZ_BRIEFING_CONTEXT`      | —                                    | Trecho inline pra estender o system prompt do `briefing` |
 | `CTBZ_BRIEFING_CONTEXT_FILE` | —                                    | Caminho pra .md local com contexto extra |
+| `CTBZ_BRAND_PRIMARY`         | `YourBrand`                          | Marca monitorada pelo Observatory |
+| `CTBZ_BRAND_COMPETITORS`     | —                                    | Comma-sep de concorrentes rastreados |
+| `CTBZ_OBSERVATORY_PROMPTS_FILE` | —                                 | JSON externo com prompts customizados (override do default 20) |
+| `CTBZ_OBSERVATORY_DELAY_MS`  | `500`                                | Delay entre calls pra evitar rate-limit |
+| `CTBZ_DEFAULT_MODEL`         | `claude-opus-4-7`                    | Modelo padrão (sobrescreve os defaults dos agentes) |
+| `CTBZ_MAX_HISTORY_TURNS`     | `20`                                 | Cap de turns mantidos no chat history |
 | `CTBZ_HTTP_ALLOWLIST`        | docs.anthropic.com, platform.openai.com, ai.google.dev, docs.perplexity.ai, github.com, raw.githubusercontent.com, developer.mozilla.org | Domínios permitidos em `http_get` |
 | `CTBZ_SHELL_ALLOWLIST`       | node,npm,npx,git,python,python3,pwd,echo | Executáveis permitidos em `shell_sandbox` |
 | `ANTHROPIC_API_KEY`          | —                                    | Auth do bridge nativo |
@@ -138,16 +146,25 @@ O runner:
 ## Mentions Observatory
 
 ```bash
-ctbz observatory run            # roda 20 prompts × N LLMs
+ctbz observatory run            # roda os prompts × N LLMs
 ctbz observatory run --dry      # só 2 prompts × N LLMs
 ctbz observatory report         # lista runs por data
 ```
 
-20 prompts curados × até 4 LLMs (conforme keys disponíveis) → scoring com
-Claude Opus extraindo marcas citadas, posição Contabilizei, sentimento,
+20 prompts default × até 4 LLMs (conforme keys disponíveis) → scoring com
+Claude extraindo marcas citadas, posição da marca primária, sentimento,
 recomendação. Métricas: Share-of-Voice, Recommendation Rate, Avg Position,
 Sentiment Score, Gap vs principal concorrente. Report Markdown em
 `site_observatory/<yyyy-ww>.md`.
+
+Configure marca + concorrentes:
+
+```bash
+export CTBZ_BRAND_PRIMARY="Acme"
+export CTBZ_BRAND_COMPETITORS="Beta,Gamma"
+# opcional: prompts customizados
+export CTBZ_OBSERVATORY_PROMPTS_FILE=$HOME/.config/ctbz/prompts.json
+```
 
 ## Estado em SQLite
 

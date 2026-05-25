@@ -3,16 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { AgentEvent, AgentSpec, ChatMessage, ToolSpec } from '../agents/types.js';
+import { DEFAULT_MODEL } from '../constants.js';
 
 export const MAX_TOOL_ITERATIONS = 8;
 const MAX_TOKENS = 4096;
-
-interface BridgeOptions {
-  apiKey?: string;
-  authToken?: string;
-  baseURL?: string;
-  modelName?: string;
-}
 
 export class AgentBridge {
   private client: Anthropic;
@@ -24,7 +18,14 @@ export class AgentBridge {
     this.modelName = modelName;
   }
 
-  static fromEnv(modelName = 'claude-opus-4-7'): AgentBridge {
+  // Acesso ao client subjacente. Use quando precisar chamar messages.create
+  // diretamente (ex: scoring one-shot sem tools). Para chats com tool_use
+  // loop, use `stream()`.
+  getClient(): Anthropic {
+    return this.client;
+  }
+
+  static fromEnv(modelName: string = DEFAULT_MODEL): AgentBridge {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     const authToken = process.env.ANTHROPIC_AUTH_TOKEN;
 
@@ -76,6 +77,7 @@ export class AgentBridge {
     spec: AgentSpec,
     userInput: string,
     history: ChatMessage[] = [],
+    opts: { signal?: AbortSignal } = {},
   ): AsyncGenerator<AgentEvent, void, void> {
     const messages: ChatMessage[] = [...history, { role: 'user', content: userInput }];
     const toolDefs = spec.tools
@@ -88,15 +90,22 @@ export class AgentBridge {
       }));
 
     for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+      if (opts.signal?.aborted) {
+        yield { type: 'error', error: 'cancelled' };
+        return;
+      }
       let response: Anthropic.Messages.Message;
       try {
-        const stream = this.client.messages.stream({
-          model: this.modelName,
-          max_tokens: MAX_TOKENS,
-          system: spec.system_prompt,
-          tools: toolDefs.length ? toolDefs : undefined,
-          messages: messages as Anthropic.Messages.MessageParam[],
-        });
+        const stream = this.client.messages.stream(
+          {
+            model: this.modelName,
+            max_tokens: MAX_TOKENS,
+            system: spec.system_prompt,
+            tools: toolDefs.length ? toolDefs : undefined,
+            messages: messages as Anthropic.Messages.MessageParam[],
+          },
+          opts.signal ? { signal: opts.signal } : undefined,
+        );
 
         for await (const ev of stream) {
           if (
@@ -111,6 +120,10 @@ export class AgentBridge {
       } catch (err: unknown) {
         const raw = err instanceof Error ? err.message : String(err);
         let msg = raw;
+        if (opts.signal?.aborted || raw.includes('AbortError') || raw.includes('aborted')) {
+          yield { type: 'error', error: 'cancelled' };
+          return;
+        }
         if (raw.includes('429') || raw.includes('rate_limit')) {
           msg = `rate_limit no modelo ${this.modelName}. Tente /model claude-sonnet-4-6 ou /model claude-haiku-4-5-20251001 (mais baratos e com cota maior).`;
         } else if (raw.includes('401') || raw.includes('authentication')) {

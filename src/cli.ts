@@ -13,7 +13,7 @@
 // `meow` faz parsing leve; pra TUI delegamos pra src/index.tsx via require dinâmico.
 
 import meow from 'meow';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import './lib/agents/index.js';
 import { REGISTRY } from './lib/agents/registry.js';
