@@ -13,7 +13,11 @@ const files = readdirSync(here)
 let failed = 0;
 for (const f of files) {
   process.stdout.write(`▶ ${f} ... `);
-  const r = spawnSync('npx', ['tsx', path.join(here, f)], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const r = spawnSync('npx', ['tsx', path.join(here, f)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
   if (r.status === 0) {
     const last = (r.stdout.trim().split('\n').pop() ?? '').trim();
     console.log(last || 'ok');
