@@ -1,7 +1,6 @@
-// Clientes para os 4 LLMs do observatory. Cada um expõe `ask(prompt) → text`.
+// Clientes para os LLMs do observatory. Cada um expõe `ask(prompt) → text`.
 // Erros são re-thrown como Error com prefixo do client (ex: "[gemini] ...").
 
-import Anthropic from '@anthropic-ai/sdk';
 import { AgentBridge } from '../native/anthropic_bridge.js';
 
 export type LlmClientId = 'claude' | 'openai' | 'gemini' | 'perplexity';
@@ -16,16 +15,14 @@ export interface LlmClient {
 class ClaudeClient implements LlmClient {
   readonly id = 'claude';
   readonly label = 'Claude Sonnet';
-  readonly model = 'claude-sonnet-4-6';
-  private client: Anthropic;
+  readonly model = process.env.CTBZ_CLAUDE_MODEL || 'claude-sonnet-4-6';
+  private bridge: AgentBridge;
   constructor() {
-    const bridge = AgentBridge.fromEnv(this.model);
-    // hack para reaproveitar credenciais do bridge
-    // @ts-expect-error acesso interno controlado
-    this.client = bridge.client;
+    this.bridge = AgentBridge.fromEnv(this.model);
   }
   async ask(prompt: string): Promise<string> {
-    const resp = await this.client.messages.create({
+    const client = this.bridge.getClient();
+    const resp = await client.messages.create({
       model: this.model,
       max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
@@ -71,10 +68,14 @@ class GeminiClient implements LlmClient {
     this.apiKey = k;
   }
   async ask(prompt: string): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    // API key vai no header — não na query string — pra não vazar em logs/proxies.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': this.apiKey,
+      },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     });
     if (!resp.ok) throw new Error(`[gemini] HTTP ${resp.status}: ${await resp.text()}`);

@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import { AgentSpec } from './types.js';
 import { registerAgent } from './registry.js';
+import { DEFAULT_MODEL } from '../constants.js';
 
 // Briefing agent — genérico. Para customizar o contexto (áreas, líderes,
 // documentos canônicos), exporte CTBZ_BRIEFING_CONTEXT com um trecho de
@@ -11,7 +13,6 @@ function loadExtraContext(): string {
   const file = process.env.CTBZ_BRIEFING_CONTEXT_FILE;
   if (file) {
     try {
-      const fs = require('node:fs') as typeof import('node:fs');
       const text = fs.readFileSync(file, 'utf8');
       if (text.trim()) return '\n\n' + text.trim();
     } catch {
@@ -22,12 +23,11 @@ function loadExtraContext(): string {
 }
 
 const BASE_PROMPT = `Você é o agente \`briefing\`. Produz briefings executivos curtos
-(Markdown) a partir de documentos internos disponíveis via tool
-\`read_confidencial\`.
+(Markdown) a partir de documentos disponíveis via tool \`read_confidencial\`.
 
 FERRAMENTAS
 - \`read_confidencial(file, max_chars?)\` — lê um arquivo da allow-list
-  local (controlada por env CTBZ_CONFIDENCIAL_FILES no servidor).
+  local (controlada por env CTBZ_CONFIDENCIAL_FILES).
 
 ESTRUTURA DA RESPOSTA (Markdown, sem cabeçalhos extras):
 
@@ -49,7 +49,7 @@ REGRAS DE CONFIDENCIALIDADE
 
 ESTILO
 - Direto, sem floreios. Cada bullet < 25 palavras.
-- Cite a fonte ao final do bullet entre parênteses, ex: \`(relatório.json §3)\`.
+- Cite a fonte ao final do bullet entre parênteses, ex: \`(relatorio.json §3)\`.
 - Em caso de dúvida sobre o foco, escreva o briefing geral e pergunte ao
   usuário ao fim, em uma linha, qual ponto aprofundar.`;
 
@@ -60,7 +60,7 @@ export const briefingSpec: AgentSpec = {
   description: 'Briefing executivo a partir dos arquivos da allow-list local.',
   system_prompt: SYSTEM_PROMPT,
   tools: ['read_confidencial'],
-  model_name: 'claude-opus-4-7',
+  model_name: DEFAULT_MODEL,
 };
 
 registerAgent(briefingSpec);

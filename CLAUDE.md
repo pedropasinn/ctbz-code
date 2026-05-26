@@ -1,27 +1,37 @@
-# CLAUDE.md — `ctbz-code` (repo público interno)
+# CLAUDE.md — `ctbz-code`
 
-Repositório privado da Contabilizei contendo o código do `ctbz-code` —
-TUI + arquitetura monorepo-like + Mentions Observatory.
+Repositório público com o código do `ctbz-code` — TUI + arquitetura
+monorepo-like + Mentions Observatory.
 
 ## Regime
 
-- Este repo é privado. **Não publicar dados internos** (JSONs de pesquisa,
-  decks estratégicos, números brutos, nomes de clientes/funcionários) no
-  code-base, em commits ou em issues. Use env vars + arquivos locais
-  ignorados pelo `.gitignore`.
-- `local_context/` e `*.local.md` são ignorados — coloque aí qualquer
-  customização que precise carregar contexto sensível.
-- `notes/`, `ctbz_tasks/*.json` e `ctbz_tasks/private_*.md` também são
-  ignorados.
+O code-base é **genérico e sanitizado**. Nenhuma marca, nome de empresa,
+documento interno ou número bruto está hard-coded. Tudo que é específico
+de uma instalação vem via **env** ou **arquivos locais** ignorados pelo
+`.gitignore`.
 
-## Como customizar agentes com contexto interno (sem comitar)
+Customização sensível mora em (não-versionados):
 
-O `briefing` agente carrega contexto extra de:
+- `local_context/` e `*.local.md` — ignorados.
+- `notes/`, `ctbz_tasks/*.json`, `ctbz_tasks/private_*.md` — ignorados.
+- `~/.config/ctbz/*.md` (qualquer caminho fora do repo).
 
-- `CTBZ_BRIEFING_CONTEXT` (env, string inline) ou
-- `CTBZ_BRIEFING_CONTEXT_FILE` (env, caminho pra .md local).
+## Como customizar com contexto interno (sem comitar)
 
-Exemplo no `~/.bashrc` do seu PC pessoal:
+### Marca + concorrentes (Mentions Observatory)
+
+```bash
+export CTBZ_BRAND_PRIMARY="Acme"
+export CTBZ_BRAND_COMPETITORS="Beta,Gamma,Delta"
+# opcional: prompts customizados em JSON externo
+export CTBZ_OBSERVATORY_PROMPTS_FILE="$HOME/.config/ctbz/prompts.json"
+```
+
+O JSON tem shape `[{ "id": "...", "category": "...", "text": "..." }]`,
+e o `text` pode usar placeholders `{{brand}}` e `{{competitor}}`
+substituídos em runtime.
+
+### Briefing agent — contexto extra
 
 ```bash
 export CTBZ_BRIEFING_CONTEXT_FILE=$HOME/.config/ctbz/briefing_local.md
@@ -34,7 +44,13 @@ nada disso vai pro git.
 
 ## Convenções de código
 
-- Edits cross-platform (Linux/Windows). `node:path` joins, sem `/` literais.
+- Edits cross-platform (Linux/Windows/macOS). `node:path` joins, sem `/`
+  literais; `fileURLToPath` em ESM.
 - Tools que tocam filesystem devem rejeitar paths fora do sandbox.
-- Cada PR deve ter smoke verde (`npm run smoke`).
+- Allow-lists em todas as tools que tocam rede ou shell.
+- Cada PR deve ter smoke verde (`npm run smoke`) — o CI roda em
+  Linux/macOS/Windows × Node 18/20/22, e ainda um pack-roundtrip que
+  instala o tarball publicável e roda `ctbz-code state`.
 - Não comite logs, dumps de SQLite, ou outputs do Observatory.
+- Não comite system prompts com nomes próprios — use `CTBZ_*` envs ou
+  arquivos locais.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Box, useApp, useInput, useStdin } from 'ink';
 import { Banner } from './components/Banner.js';
 import { Messages, Message } from './components/Messages.js';
@@ -10,9 +10,10 @@ import './lib/agents/index.js'; // bootstrap REGISTRY
 import { REGISTRY, listAgents } from './lib/agents/registry.js';
 import { ChatMessage } from './lib/agents/types.js';
 import { parseTaskFile, runQueueFile, Multiplexer, FunctionChannel, defaultFileChannelFor } from './lib/queue/index.js';
-import { listTaskFiles, listTaskItems, newSession, addMessage, addToolCall } from './lib/state.js';
+import { listTaskFiles, listTaskItems, newSession, addMessage } from './lib/state.js';
 import { runObservatory, formatObservatoryReport } from './lib/observatory/index.js';
 import { CTBZ_HOME, WORK_DIR, CONFIDENCIAL_DIR, TASKS_DIR, STATE_DB } from './lib/paths.js';
+import { DEFAULT_MODEL, MAX_HISTORY_TURNS } from './lib/constants.js';
 import path from 'node:path';
 
 const helpText = [
@@ -38,6 +39,12 @@ const helpText = [
 
 const DEFAULT_PROVIDER: ProviderId = 'ctbz';
 
+function capHistory(h: ChatMessage[]): ChatMessage[] {
+  const maxMessages = MAX_HISTORY_TURNS * 2;
+  if (h.length <= maxMessages) return h;
+  return h.slice(-maxMessages);
+}
+
 export const App: React.FC = () => {
   const { exit } = useApp();
   const { setRawMode } = useStdin();
@@ -55,6 +62,25 @@ export const App: React.FC = () => {
       content: `Sessão iniciada. Provedor: ${providers[DEFAULT_PROVIDER].label} · agente: ${(providers[DEFAULT_PROVIDER] as NativeProvider).defaultAgent}. Use /help para ver comandos.`,
     },
   ]);
+
+  // Persistência de sessão em SQLite (~/.ctbz/state.db). Falha silenciosa
+  // se o DB não puder ser inicializado — não bloqueia a TUI.
+  const sessionIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    try {
+      const model = modelOverride ?? REGISTRY[agentName]?.model_name ?? DEFAULT_MODEL;
+      sessionIdRef.current = newSession(agentName, model);
+    } catch {
+      sessionIdRef.current = null;
+    }
+    // intencionalmente sem deps: cria 1 sessão por execução da TUI.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const persistMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
+    const sid = sessionIdRef.current;
+    if (sid == null || !content) return;
+    try { addMessage(sid, role, content); } catch { /* DB offline — ok */ }
+  };
 
   useInput((_input, key) => {
     if (key.ctrl && _input === 'c') exit();
@@ -106,17 +132,17 @@ export const App: React.FC = () => {
           '  claude-sonnet-4-6            balanceado (recomendado p/ uso diário)',
           '  claude-haiku-4-5-20251001    barato e rápido, ótimo p/ testes',
           '',
-          `atual: ${modelOverride ?? (REGISTRY[agentName]?.model_name ?? 'claude-opus-4-7')} (agente ${agentName})`,
+          `atual: ${modelOverride ?? (REGISTRY[agentName]?.model_name ?? DEFAULT_MODEL)} (agente ${agentName})`,
         ].join('\n'));
       }
 
       if (cmd === 'model') {
         if (!arg) {
-          return sys(`atual: ${modelOverride ?? (REGISTRY[agentName]?.model_name ?? 'claude-opus-4-7')}. Use /model <id> ou /model reset.`);
+          return sys(`atual: ${modelOverride ?? (REGISTRY[agentName]?.model_name ?? DEFAULT_MODEL)}. Use /model <id> ou /model reset.`);
         }
         if (arg === 'reset' || arg === 'default') {
           setModelOverride(null);
-          return sys(`modelo resetado para o default do agente (${REGISTRY[agentName]?.model_name ?? 'claude-opus-4-7'}).`);
+          return sys(`modelo resetado para o default do agente (${REGISTRY[agentName]?.model_name ?? DEFAULT_MODEL}).`);
         }
         setModelOverride(arg);
         return sys(`modelo override = ${arg} (vale para o provider ctbz nesta sessão).`);
@@ -238,6 +264,7 @@ export const App: React.FC = () => {
 
     // ---- prompt normal: roteia pro provedor ativo ----
     append({ role: 'user', content: text });
+    persistMessage('user', text);
     setBusy(true);
     const provider = providers[active];
     const providerLabel = provider.kind === 'native'
@@ -283,14 +310,25 @@ export const App: React.FC = () => {
           return;
         }
         if (acc) {
-          setHistory((prev) => [
+          persistMessage('assistant', acc);
+          setHistory((prev) => capHistory([
             ...prev,
             { role: 'user', content: text },
             { role: 'assistant', content: acc },
-          ]);
+          ]));
         }
       },
     }, provider.kind === 'native' ? { agentName, history, modelName: modelOverride ?? undefined } : undefined);
+  };
+
+  // Wrapper para garantir que erros async no handleSubmit virem mensagens
+  // de sistema em vez de unhandled promise rejections silenciosos.
+  const onSubmitSafe = (raw: string) => {
+    handleSubmit(raw).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      sys(`erro inesperado: ${msg}`);
+      setBusy(false);
+    });
   };
 
   const statusMode = providers[active].kind === 'native'
@@ -304,7 +342,7 @@ export const App: React.FC = () => {
       <PromptBox
         value={input}
         onChange={setInput}
-        onSubmit={handleSubmit}
+        onSubmit={onSubmitSafe}
         disabled={busy}
       />
       <StatusBar cwd={process.cwd()} mode={statusMode} />

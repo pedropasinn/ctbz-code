@@ -5,6 +5,7 @@ import { REGISTRY } from './agents/registry.js';
 import { TOOL_FACTORIES } from './tools/index.js';
 import { AgentBridge } from './native/anthropic_bridge.js';
 import { ChatMessage } from './agents/types.js';
+import { DEFAULT_MODEL } from './constants.js';
 
 export interface RunCallbacks {
   onChunk: (text: string) => void;
@@ -85,11 +86,11 @@ function runNativeAgent(
     return { cancel: () => {} };
   }
 
-  let cancelled = false;
+  const abortCtrl = new AbortController();
   (async () => {
     let bridge: AgentBridge;
     try {
-      bridge = AgentBridge.fromEnv(ctx?.modelName ?? spec.model_name ?? 'claude-opus-4-7');
+      bridge = AgentBridge.fromEnv(ctx?.modelName ?? spec.model_name ?? DEFAULT_MODEL);
     } catch (e: unknown) {
       cb.onError(e instanceof Error ? e.message : String(e));
       cb.onDone(1);
@@ -101,8 +102,8 @@ function runNativeAgent(
     }
 
     try {
-      for await (const ev of bridge.stream(spec, prompt, ctx?.history ?? [])) {
-        if (cancelled) return;
+      for await (const ev of bridge.stream(spec, prompt, ctx?.history ?? [], { signal: abortCtrl.signal })) {
+        if (abortCtrl.signal.aborted) return;
         if (ev.type === 'text') cb.onChunk(ev.text);
         else if (ev.type === 'tool_use') {
           cb.onToolStart?.(ev.tool_name, JSON.stringify(ev.tool_input).slice(0, 120));
@@ -122,7 +123,7 @@ function runNativeAgent(
     }
   })();
 
-  return { cancel: () => { cancelled = true; } };
+  return { cancel: () => abortCtrl.abort() };
 }
 
 export function runLogin(provider: Provider): Promise<number> {

@@ -15,6 +15,8 @@ import {
   startTaskRun, finishTaskRun,
 } from '../state.js';
 import { WORK_DIR, ensureDir, TASKS_STATE_DIR } from '../paths.js';
+import { DEFAULT_MODEL } from '../constants.js';
+import { shellSandbox } from '../tools/shell_sandbox.js';
 
 export interface QueueRunOptions {
   maxItems?: number;
@@ -37,7 +39,43 @@ function tail(s: string, n = 2000): string {
 }
 
 async function runVerify(cmd: string, timeoutMs = 60_000): Promise<{ code: number; stdout: string; stderr: string }> {
-  // verify roda via shell pra permitir pipes e &&. WORK_DIR como cwd.
+  // Por default, verify roda via shell_sandbox: o primeiro token vira `cmd`
+  // (validado contra a allow-list de bins) e o resto vai como args sem
+  // expansão de shell. Pipes/&& só ficam disponíveis se quem rodou setar
+  // CTBZ_QUEUE_VERIFY_SHELL=1 — opt-in explícito porque o .md de fila
+  // pode vir de PR, e shell:true permite execução arbitrária.
+  if (process.env.CTBZ_QUEUE_VERIFY_SHELL === '1') {
+    return runVerifyShell(cmd, timeoutMs);
+  }
+  return runVerifySandboxed(cmd, timeoutMs);
+}
+
+async function runVerifySandboxed(cmd: string, timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string }> {
+  const tokens = cmd.trim().split(/\s+/);
+  if (tokens.length === 0 || !tokens[0]) {
+    return { code: 2, stdout: '', stderr: 'verify vazio' };
+  }
+  try {
+    const out = await Promise.race([
+      shellSandbox({ cmd: tokens[0], args: tokens.slice(1), timeout_ms: timeoutMs }),
+      new Promise<string>((_, rej) => setTimeout(() => rej(new Error('verify timeout')), timeoutMs + 1000)),
+    ]);
+    // shellSandbox empacota como "exit=N\n--- stdout ---\n...--- stderr ---\n..."
+    const exitMatch = out.match(/^exit=(-?\d+|null)/);
+    const code = exitMatch && exitMatch[1] !== 'null' ? parseInt(exitMatch[1], 10) : -1;
+    const stdoutMatch = out.match(/--- stdout ---\n([\s\S]*?)--- stderr ---/);
+    const stderrMatch = out.match(/--- stderr ---\n([\s\S]*)$/);
+    return {
+      code,
+      stdout: stdoutMatch ? stdoutMatch[1] : '',
+      stderr: stderrMatch ? stderrMatch[1] : '',
+    };
+  } catch (e: unknown) {
+    return { code: 2, stdout: '', stderr: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function runVerifyShell(cmd: string, timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, { cwd: WORK_DIR, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
@@ -62,7 +100,7 @@ async function runItemWithAgent(
   if (!spec) return { assistantText: '', ok: false, errMsg: `agente desconhecido: ${agentName}` };
   let bridge: AgentBridge;
   try {
-    bridge = AgentBridge.fromEnv(modelName ?? spec.model_name ?? 'claude-opus-4-7');
+    bridge = AgentBridge.fromEnv(modelName ?? spec.model_name ?? DEFAULT_MODEL);
   } catch (e: unknown) {
     return { assistantText: '', ok: false, errMsg: e instanceof Error ? e.message : String(e) };
   }

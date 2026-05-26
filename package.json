@@ -1,12 +1,20 @@
 {
   "name": "ctbz-code",
-  "version": "0.1.0",
-  "description": "TUI interna estilo Claude Code para a Contabilizei",
+  "version": "0.2.0",
+  "description": "TUI/CLI de orquestração de agentes IA (Anthropic SDK + tool_use loop) com filas monorepo-like e Mentions Observatory.",
   "type": "module",
   "bin": {
     "ctbz": "./bin/ctbz.js",
     "ctbz-code": "./bin/ctbz-code.js"
   },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "INSTALL.md",
+    "CHANGELOG.md",
+    "docs"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
