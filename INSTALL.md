@@ -1,139 +1,84 @@
-# Instalar `ctbz` no PC da empresa
+# Instalar o `ctbz-code` (Linux do trabalho, via git clone)
 
-Hoje o projeto vive em `Confidencial/` — não tem repo público pra fazer
-`npm i -g <nome>` direto da internet. Use o tarball.
+Repo público: `github.com/pedropasinn/ctbz-code`. Pré-requisito: **Node ≥ 18** e
+**git**.
 
-## Caminho 1 — tarball (recomendado, conservador)
-
-### No laptop pessoal (aqui)
+## 1. Clone + setup (uma vez)
 
 ```bash
-cd /home/pedro/repo/Cont/Confidencial/ctbz-code
-npm run build && npm pack
-# saída: ./ctbz-code-0.1.0.tgz   (~98 KB, só código compilado)
+git clone https://github.com/pedropasinn/ctbz-code.git
+cd ctbz-code
+./setup.sh
 ```
 
-### Transferir o `.tgz` pro PC da empresa
-
-Opções (escolha uma que respeite a política da Contabilizei):
-
-- **Pendrive** (mais seguro pra material derivado de Confidencial).
-- **Slack DM pra você mesmo** (se a empresa permite — o arquivo são 98K e
-  é só código).
-- **Google Drive corporativo** (subir pra uma pasta sua, baixar lá).
-- **SFTP** se tiver acesso.
-
-### No PC da empresa, **uma linha**:
+O `setup.sh` checa o Node, roda `npm install`, builda (`npm run build`) e tenta
+um `npm link` global (deixa `ctbz` no PATH). Confira:
 
 ```bash
-# pré-requisito: Node ≥18 instalado (nvm ou pacote do SO)
-npm install -g ./ctbz-code-0.1.0.tgz
+ctbz state                # paths/config (ou: npm start -- state)
+npm run smoke             # 8 smokes — devem ficar verdes
 ```
 
-Confere:
+Se o `npm link` falhar por permissão global, use `npm start -- <args>` ou
+`node bin/ctbz-code.js <args>`.
+
+## 2. Autenticação
+
+O bridge nativo precisa de **uma** destas (ordem de precedência):
+
+1. `export ANTHROPIC_API_KEY=sk-ant-...` (console.anthropic.com)
+2. `export ANTHROPIC_AUTH_TOKEN=<bearer>`
+3. `~/.claude/.credentials.json` do Claude Code CLI já logado (basta `claude`
+   logado na máquina).
+
+Para persistir, copie `.env.example` para `.env`, preencha e carregue:
 
 ```bash
-which ctbz                # deve apontar pro PATH global do node
-ctbz state                # mostra paths/config
-ctbz                      # abre a TUI
+cp .env.example .env       # edite
+set -a; source .env; set +a
 ```
 
-### Auth no PC da empresa
-
-O bridge nativo precisa de **uma** das três:
-
-1. `export ANTHROPIC_API_KEY=sk-ant-...` (mais simples; pegue no console.anthropic.com)
-2. `export ANTHROPIC_AUTH_TOKEN=<token>` (OAuth Bearer)
-3. Ter `~/.claude/.credentials.json` do Claude Code CLI já logado.
-
-Coloque no `~/.bashrc` ou `~/.zshrc` se quiser persistir.
-
-## Caminho 2 — uma linha de verdade (futuro)
-
-Quando o código estiver sanitizado (remover referências internas tipo
-`NN-QD1`, nomes de líderes de trilha do system prompt do `briefing`) e
-você quiser que outros analistas instalem facilmente:
-
-### Opção 2a — repo privado GitHub/GitLab
+## 3. Usar
 
 ```bash
-# Você (1x):
-cd /home/pedro/repo
-git clone /home/pedro/repo/Cont/Confidencial/ctbz-code ctbz-code-public
-cd ctbz-code-public
-# remover system prompts internos, criar versão genérica
-git init && git add . && git commit -m "ctbz-code v0.1.0"
-gh repo create contabilizei/ctbz-code --private --source=. --push
-
-# Outros analistas:
-npm install -g git+https://github.com/contabilizei/ctbz-code.git
+ctbz                              # abre a TUI
+ctbz state                        # paths/config
+ctbz queue show ctbz_tasks/x.md   # parseia uma fila
+ctbz queue run  ctbz_tasks/x.md   # executa as tarefas pendentes
+ctbz agent briefing -q "pergunta" # agente headless
 ```
 
-### Opção 2b — servir o tarball internamente
+Filas ficam em `ctbz_tasks/*.md` (env `CTBZ_TASKS_DIR`). Formato e anotações
+no `README.md`.
 
-Se a Contabilizei tem um servidor interno HTTP/S3:
+## 4. Customização sensível (sem comitar)
+
+Nada interno entra no git. Use env / arquivos locais:
 
 ```bash
-# Você sobe ctbz-code-0.1.0.tgz pra https://internal.contabilizei.com/ctbz/
-# Outros:
-curl -fsSL https://internal.contabilizei.com/ctbz/latest.tgz | tar -xz
-npm install -g ./package
+export CTBZ_BRAND_PRIMARY="Acme"
+export CTBZ_BRAND_COMPETITORS="Beta,Gamma"
+export CTBZ_BRIEFING_CONTEXT_FILE=$HOME/.config/ctbz/briefing_local.md
+export CTBZ_CONFIDENCIAL_DIR=$HOME/internal_docs
+export CTBZ_CONFIDENCIAL_FILES=relatorioA.json,relatorioB.json
 ```
 
-Ou com script:
+Ver a tabela completa de envs no `README.md` e mais detalhes no `CLAUDE.md`.
+
+## Atualizar
 
 ```bash
-curl -fsSL https://internal.contabilizei.com/ctbz/install.sh | bash
-```
-
-Não fiz esse script ainda — quando você tiver o servidor interno, é só
-me avisar e eu escrevo.
-
-## Pré-requisitos no PC da empresa
-
-```bash
-node --version            # >=18
-npm --version
-which python3             # opcional (pra shell_sandbox)
-which git                 # opcional
-```
-
-Se faltar Node:
-
-```bash
-# Ubuntu/Debian
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# Windows: baixar de nodejs.org (LTS)
-# macOS: brew install node
+git pull && npm install && npm run build
 ```
 
 ## Troubleshooting
 
-- **`ctbz: command not found`** → npm global bin não está no PATH.
-  Rode `npm bin -g` pra ver o caminho e adicione ao PATH.
-- **`better-sqlite3` falha na instalação** → falta toolchain de
-  compilação. No Linux: `sudo apt-get install build-essential python3`.
-  No Windows: `npm install --global windows-build-tools` (antigo) ou
-  Visual Studio Build Tools.
-- **`429 rate_limit`** → `/model claude-sonnet-4-6` ou
-  `/model claude-haiku-4-5-20251001` dentro da TUI.
-- **`Sem ANTHROPIC_API_KEY...`** → exporte a key (ver Auth acima).
-
-## Que arquivos NÃO vão no tarball
-
-Verifiquei: o `npm pack` não inclui:
-- nenhum `.json` de `Cont/Confidencial/`
-- nenhum `.db`, `.env`, `.credentials`
-- arquivos do `notes/`, `ctbz_tasks/` (filas locais)
-- pasta `tests/` (smokes locais)
-- só `dist/` (build compilado), `bin/`, `package.json`, `README.md`.
-
-Comando pra reconferir:
-
-```bash
-tar -tzf ctbz-code-0.1.0.tgz | head -40
-tar -tzf ctbz-code-0.1.0.tgz | grep -E "(projetos|pesquisa|slides|estudo|state\.db|\.env)"
-# segunda linha deve sair vazia
-```
+- **`ctbz: command not found`** → o bin global do npm não está no PATH. Rode
+  `npm prefix -g` / `npm bin -g` e adicione ao PATH, ou use `npm start -- …`.
+- **`better-sqlite3` falha ao instalar** → falta toolchain. Linux:
+  `sudo apt-get install build-essential python3`. (Em x64 Linux normalmente o
+  prebuilt baixa pronto e não precisa compilar.)
+- **`429 rate_limit`** → na TUI, `/model claude-sonnet-4-6` ou
+  `/model claude-haiku-4-5-20251001`.
+- **`Sem ANTHROPIC_API_KEY...`** → exporte a key ou tenha o
+  `~/.claude/.credentials.json` (ver Auth).
